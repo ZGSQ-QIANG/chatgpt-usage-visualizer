@@ -8,6 +8,7 @@ import { normalizeSnapshot, mergeSnapshot, toDisplayWindows, windowLabel } from 
 import { readLatestFromSessions } from '../src/sessions.js';
 import { AppServerClient } from '../src/appServer.js';
 import { pickMainTargets } from '../src/cdp.js';
+import { runningCommands, codexBusy } from '../src/busy.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ROLLOUT = { limit_id: 'codex', primary: { used_percent: 9.0, window_minutes: 300, resets_at: 1793809099 },
@@ -64,6 +65,40 @@ test('app-server 握手、读取与推送', async () => {
   c.stop();
 });
 
+
+import { UsageSync } from '../src/sync.js';
+
+test('app-server 临时失败时保留较新的数据，并尽快重试', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuc-sync-'));
+  const old = path.join(dir, 'rollout-old.jsonl');
+  fs.writeFileSync(old, JSON.stringify({ payload: { rate_limits: ROLLOUT } }) + '\n');
+  const t = (Date.now() - 3600000) / 1000;
+  fs.utimesSync(old, t, t); // 一小时前的旧记录
+  const failFlag = path.join(dir, 'fail');
+  process.env.FAKE_FAIL_FILE = failFlag;
+  const logs = [];
+  const sync = new UsageSync({ cfg: { sessionsDir: dir, pollFocusedSec: 60, pollBackgroundSec: 300 },
+    codexBin: path.join(here, 'fake-codex.js'), log: (m) => logs.push(m) });
+  try {
+  await sync.start();
+  assert.equal(sync.source, 'app-server');
+  const goodAt = sync.syncedAt;
+  fs.writeFileSync(failFlag, '1');
+  await sync.refresh('测试');
+  assert.equal(sync.source, 'app-server');          // 没有被旧会话记录覆盖
+  assert.ok(sync.syncedAt >= goodAt);             // 仍是 app-server 的数据（期间的推送可能让时间略晚）
+  assert.equal(sync.payload().error, '同步失败');
+  assert.equal(sync.failures, 1);                    // 30 秒后重试
+  fs.rmSync(failFlag);
+  await sync.refresh('测试');
+  assert.equal(sync.payload().error, null);
+  assert.ok(logs.some((l) => l.includes('已恢复')));
+  } finally {
+    sync.stop();
+    delete process.env.FAKE_FAIL_FILE;
+  }
+});
+
 test('只选择主窗口', () => {
   const t = (url, type = 'page') => ({ id: url, url, type, webSocketDebuggerUrl: 'ws://x' });
   const picked = pickMainTargets([
@@ -73,8 +108,6 @@ test('只选择主窗口', () => {
   ], { urlPrefix: 'app://-/index.html', excludeUrlIncludes: ['initialRoute='] });
   assert.equal(picked.length, 1);
 });
-
-import { runningCommands, codexBusy } from '../src/busy.js';
 
 test('识别 Codex 正在运行的命令，排除常驻 MCP 服务和应用自身进程', () => {
   const APP = '/Applications/ChatGPT.app';
@@ -101,3 +134,4 @@ test('最近有会话写入时视为忙碌', () => {
   fs.utimesSync(f, old, old);
   assert.equal(codexBusy(app, { sessionsDir: dir, busy: {} }).busy, false);
 });
+

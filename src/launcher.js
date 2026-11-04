@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isPortOpen } from './cdp.js';
+import { isRunning, bundleId } from './app.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -25,41 +26,6 @@ export function findInstalledLaunchers() {
   let entries = [];
   try { entries = fs.readdirSync(LAUNCHER_DIR); } catch { return []; }
   return entries.filter((e) => e.endsWith('.app')).map((e) => path.join(LAUNCHER_DIR, e)).filter(isOurLauncher);
-}
-
-// 依次在常见目录和 Spotlight 中查找桌面端应用（跳过本工具的启动器）
-export function findApp(names) {
-  const dirs = ['/Applications', LAUNCHER_DIR];
-  for (const n of names) {
-    for (const d of dirs) {
-      const p = path.join(d, `${n}.app`);
-      if (fs.existsSync(p) && !isOurLauncher(p)) return { name: n, path: p };
-    }
-  }
-  for (const n of names) {
-    try {
-      const hit = execFileSync('/usr/bin/mdfind', [`kMDItemFSName == "${n}.app"`], { encoding: 'utf8' })
-        .split('\n').filter(Boolean).find((p) => !isOurLauncher(p));
-      if (hit) return { name: n, path: hit };
-    } catch {}
-  }
-  return null;
-}
-
-const reEscape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-export function isRunning(appPath) {
-  // 从行首精确匹配，避免把 ~/Applications 下的同名启动器误认为原应用
-  const r = spawnSync('/usr/bin/pgrep', ['-f', `^${reEscape(path.join(appPath, 'Contents', 'MacOS'))}/`]);
-  return r.status === 0;
-}
-
-function bundleId(appPath) {
-  try {
-    return execFileSync('/usr/bin/defaults', ['read', path.join(appPath, 'Contents', 'Info'), 'CFBundleIdentifier'], { encoding: 'utf8' }).trim();
-  } catch {
-    return null;
-  }
 }
 
 export async function quitApp(app, timeoutMs = 20000) {
@@ -127,7 +93,7 @@ export function installLauncherApp({ app, name, nodePath, toolPath, extraArgs = 
   <key>CFBundleName</key><string>${xmlEsc(launcherName)}</string>
   <key>CFBundleDisplayName</key><string>${xmlEsc(launcherName)}</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.4.0</string>
+  <key>CFBundleShortVersionString</key><string>0.5.0</string>
   <key>LSUIElement</key><true/>
   ${hasIcon ? '<key>CFBundleIconFile</key><string>AppIcon</string>' : ''}
 </dict></plist>

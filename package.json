@@ -1,6 +1,6 @@
 {
   "name": "chatgpt-usage-visualizer",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "在 Codex 桌面端侧边栏显示 5 小时与每周额度的实时倒计时（非官方）",
   "type": "module",
   "bin": {
@@ -10,13 +10,13 @@
     "bin",
     "src",
     "config",
+    "docs",
     "README.md",
+    "CHANGELOG.md",
     "AGENTS.md",
     "CLAUDE.md",
     "install.sh",
     "uninstall.sh",
-    "CHANGELOG.md",
-    "docs",
     "LICENSE"
   ],
   "scripts": {

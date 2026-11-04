@@ -86,12 +86,13 @@ class CdpSession {
 
 // 管理所有主窗口：注入组件脚本、推送数据、窗口重载后自动补注入
 export class Injector {
-  constructor({ port, filter, widgetSource, getPayload, log }) {
+  constructor({ port, filter, widgetSource, getPayload, log, onRefresh }) {
     this.port = port;
     this.filter = filter;
     this.widgetSource = widgetSource;
     this.getPayload = getPayload;
     this.log = log;
+    this.onRefresh = onRefresh || (() => {});
     this.sessions = new Map(); // targetId -> CdpSession
   }
 
@@ -109,6 +110,10 @@ export class Injector {
         this.sessions.set(t.id, s);
         s.on('close', () => this.sessions.delete(t.id));
         s.on('Page.loadEventFired', () => this.#pushTo(s).catch(() => {}));
+        // 组件里的"刷新"按钮通过这个绑定通知本程序
+        s.on('Runtime.bindingCalled', (p) => { if (p.name === '__codexUsageRefresh') this.onRefresh(); });
+        await s.send('Runtime.enable');
+        await s.send('Runtime.addBinding', { name: '__codexUsageRefresh' });
         await s.send('Page.enable');
         await s.send('Page.addScriptToEvaluateOnNewDocument', { source: this.widgetSource });
         await s.evaluate(this.widgetSource);

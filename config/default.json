@@ -1,5 +1,8 @@
 {
-  "appNames": ["ChatGPT", "Codex"],
+  "appNames": [
+    "ChatGPT",
+    "Codex"
+  ],
   "launcherName": null,
   "debugPort": 9222,
   "codexBin": null,
@@ -22,7 +25,9 @@
   },
   "targetFilter": {
     "urlPrefix": "app://-/index.html",
-    "excludeUrlIncludes": ["initialRoute="]
+    "excludeUrlIncludes": [
+      "initialRoute="
+    ]
   },
   "thresholds": {
     "warnRemainingPercent": 25,

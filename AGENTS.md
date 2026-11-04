@@ -4,7 +4,7 @@
 
 ## 目标
 
-在用户的 macOS 上安装"Codex 额度倒计时"组件：在 `~/Applications` 下生成一个与原应用同名同图标的启动器、替换程序坞中的原图标，之后用户照常从程序坞打开 Codex 即可看到组件。
+在用户的 macOS 上安装 Codex 侧栏额度组件：在 `~/Applications` 下生成一个与原应用同名同图标的启动器、替换程序坞中的原图标，之后用户照常从程序坞打开 Codex，左侧栏用量按钮上方就会显示额度组件。
 
 ## 步骤
 
@@ -33,17 +33,17 @@ if [ -d ~/chatgpt-usage-visualizer/.git ]; then git -C ~/chatgpt-usage-visualize
 - `INSTALL_RESULT=unsupported_os`：停止
 - 其他错误：参考下方"常见问题"
 
-`install.sh` 会先运行环境检查（doctor），其中"app-server 额度读取"为 ✗ 不影响安装，组件会退回使用本地会话记录。程序坞默认会被修改（原图标替换为启动器，已自动备份，可用 `uninstall.sh` 还原）；用户不希望修改程序坞时加 `--no-dock`。如果 doctor 显示"找不到应用"，用 `ls /Applications | grep -i -E "codex|chatgpt"` 找到应用名，再运行 `install.sh --app 应用名`。
+环境检查（doctor）中"app-server 额度读取"为 ✗ 不影响安装，组件会退回使用本地会话记录。程序坞默认会被修改（原图标替换为启动器，已自动备份，可用 `uninstall.sh` 还原）；用户不希望修改程序坞时加 `--no-dock`。如果显示"找不到应用"，用 `ls /Applications | grep -i -E "codex|chatgpt"` 找到应用名，再加 `--app 应用名` 重新运行。
 
 ### 5. 重启 Codex 使组件生效
 重启会退出 Codex，正在 Codex 中运行的任务和对话会中断。**如果你本身运行在 Codex / ChatGPT 桌面端里，这一步会结束你自己的会话**，所以必须先向用户完成汇报，再把这条命令作为最后一个动作执行：
 
-先告诉用户："安装完成，Codex 将在 15 秒后自动重启，重启后左侧栏用量按钮上方会出现额度组件。以后照常从程序坞点图标打开即可；Spotlight 里会看到两个同名应用，请选 ~/Applications 下的那个。"然后执行：
+先告诉用户："安装完成，Codex 将在 15 秒后自动重启（可能会弹窗确认，如果没有任务在运行，点'立即重启'即可），重启后左侧栏用量按钮上方会出现额度组件。以后照常从程序坞点图标打开即可；Spotlight 里会看到两个同名应用，请选 ~/Applications 下的那个。"然后执行：
 ```bash
 node ~/chatgpt-usage-visualizer/bin/chatgpt-usage.js relaunch
 ```
 
-如果你不是运行在 Codex 里（例如在终端或其他 IDE 中），执行后可以等待 30 秒验证：
+如果你不是运行在 Codex 里，执行后可以等待 30 秒验证：
 ```bash
 tail -n 20 ~/Library/Logs/chatgpt-usage-visualizer.log
 ```
@@ -54,9 +54,9 @@ tail -n 20 ~/Library/Logs/chatgpt-usage-visualizer.log
 | 现象 | 处理 |
 |---|---|
 | `EPERM: process.cwd failed` | 先 `cd ~` 再重试 |
-| doctor 中 codex 程序报 `ENOENT` | npm 版 Codex CLI 损坏，工具会自动改用桌面端内置程序，可忽略；需要修复时运行 `npm install -g @openai/codex` |
+| doctor 中 codex 程序报 `ENOENT` | npm 版 Codex CLI 损坏，工具会自动改用桌面端内置程序，可忽略 |
 | 程序坞修改失败 | 不影响使用，告诉用户手动把 `~/Applications` 下的启动器拖到程序坞 |
-| 日志提示"找不到挂载点" | Codex 界面已更新，告诉用户需要等待本项目更新选择器，或参考 README"常见问题"自行配置 |
+| 日志提示"找不到挂载点" | Codex 界面已更新，告诉用户需要等待本项目更新选择器 |
 | 日志提示调试端口没有打开 | 该版本 Codex 可能禁用了调试端口，本工具无法使用 |
 
 ## 卸载

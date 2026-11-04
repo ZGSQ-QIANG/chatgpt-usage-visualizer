@@ -67,6 +67,7 @@ export class UsageSync extends EventEmitter {
   }
 
   #accept(reason, syncedAt = Date.now()) {
+    if (this.error) this.log('额度读取已恢复');
     this.syncedAt = syncedAt;
     this.error = null;
     this.failures = 0;
@@ -110,15 +111,19 @@ export class UsageSync extends EventEmitter {
         this.log(`读取额度失败：${e.message}`);
       }
     }
+    const appServerFailed = !!this.client;
     const fallback = readLatestFromSessions(this.cfg.sessionsDir);
-    if (fallback) {
+    // 只有会话记录比当前数据更新时才采用，避免一次临时的网络失败把较新的数据换成旧记录
+    if (fallback && (!this.syncedAt || fallback.mtime > this.syncedAt)) {
       this.snapshot = fallback.snapshot;
       this.source = 'sessions';
       this.#accept(`${reason}，来自会话记录`, Math.round(fallback.mtime));
+      if (appServerFailed) this.failures = 1; // app-server 仍需尽快重试
       return;
     }
     this.failures++;
-    this.error = '无法获取额度数据';
+    // 已有数据时保留原数据，只标记同步失败；界面会显示"同步失败，稍后自动重试"
+    this.error = this.snapshot ? '同步失败' : '无法获取额度数据';
     this.emit('change', this.payload());
   }
 

@@ -5,7 +5,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { normalizeSnapshot } from './normalize.js';
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 
 // 查找 codex 可执行文件：配置 > 桌面端安装包内置 > PATH
 // 每个候选都先试运行 `--version`，跳过安装损坏的（例如 npm 安装缺少平台二进制）

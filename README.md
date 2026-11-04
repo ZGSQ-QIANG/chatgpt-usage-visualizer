@@ -1,12 +1,10 @@
 # ChatGPT Usage Visualizer
 
-ChatGPT / Codex 桌面端额度可视化工具。
-
-在 Codex 桌面端左侧栏、系统"用量"按钮上方，常驻显示 **5 小时额度** 和 **每周额度** 的剩余比例与重置倒计时。点击组件可查看详情：剩余百分比、精确到秒的倒计时、重置时刻和同步状态。额度全自动同步，无需手动刷新。
+ChatGPT / Codex 桌面端额度可视化工具：在 Codex 左侧栏"用量"按钮上方，常驻显示 **5 小时额度** 和 **每周额度** 的剩余比例与重置倒计时。点击组件可查看详情：剩余百分比、精确到秒的倒计时、重置时刻和同步状态。全自动同步，也可以随时手动刷新。
 
 <img src="docs/preview-light.png" width="360"> <img src="docs/preview-dark.png" width="360">
 
-> ⚠️ **非官方工具，与 OpenAI 无关。** 本工具通过 Chromium 调试端口向 Codex 界面注入组件，属于对官方客户端的非官方修改，可能违反 OpenAI 的使用条款，请自行评估风险。Codex 更新界面后组件可能暂时失效，需要更新配置或等待本项目更新。
+> ⚠️ **非官方工具，与 OpenAI 无关。** 本工具通过 Chromium 调试端口向 Codex 界面注入组件，属于对官方客户端的非官方修改，可能违反 OpenAI 的使用条款，请自行评估风险；Codex 更新界面后组件可能暂时失效。
 
 ## 让 AI 帮你安装
 
@@ -17,7 +15,7 @@ ChatGPT / Codex 桌面端额度可视化工具。
 按照仓库里 AGENTS.md 的步骤执行。
 ```
 
-安装完成后 Codex 会自动重启一次，之后照常从程序坞点 Codex 图标打开即可（图标已被替换为启动器）。
+安装完成后 Codex 会自动重启一次，之后照常从程序坞点 Codex 图标打开即可。
 
 ## 运行要求
 
@@ -55,9 +53,11 @@ node bin/chatgpt-usage.js doctor
 
 会在 `~/Applications` 下生成一个与原应用同名、同图标的启动器（例如 `~/Applications/ChatGPT.app`），并把程序坞里原来的图标替换成它（原设置已备份，卸载时会还原；不想改程序坞可加 `--no-dock`）。完全退出 Codex 后，照常从程序坞点图标打开即可。想换启动器名称可加 `--launcher-name 名称`。卸载运行 `./uninstall.sh`。
 
+## 使用方式
+
 **不想用启动器的话**，也可以每次手动运行 `node bin/chatgpt-usage.js start`，保持终端窗口开着，按 `Ctrl+C` 停止。
 
-## 启动器的工作方式
+### 启动器的工作方式
 
 - 点击启动器：以调试模式打开 Codex，并在后台运行组件，不需要开终端
 - 退出 Codex：组件在几秒内自动停止
@@ -113,7 +113,7 @@ node bin/chatgpt-usage.js doctor
 ```
 node bin/chatgpt-usage.js doctor      检查运行环境、调试端口、数据源
 node bin/chatgpt-usage.js install     创建启动器（--dock 替换程序坞图标，--launcher-name 自定义名称）
-node bin/chatgpt-usage.js uninstall   删除启动器并还原程序坞
+node bin/chatgpt-usage.js uninstall   删除启动器，还原程序坞
 node bin/chatgpt-usage.js relaunch    15 秒后通过启动器重新打开 Codex
 node bin/chatgpt-usage.js start       手动启动（终端前台运行）
 
@@ -142,10 +142,10 @@ node bin/chatgpt-usage.js start       手动启动（终端前台运行）
 
 ```bash
 npm test                                   # 单元测试（含模拟 app-server）
-node bin/chatgpt-usage.js start --debug      # 输出详细日志
+node bin/chatgpt-usage.js start --debug    # 输出详细日志
 ```
 
-目录结构：`bin/` 命令行入口，`src/widget.js` 注入界面的组件，`src/sync.js` 自动同步，`src/appServer.js` app-server 客户端，`src/cdp.js` 调试协议，`src/launcher.js` 应用启动与启动器生成，`config/default.json` 默认配置。
+目录结构：`bin/` 命令行入口，`src/widget.js` 注入界面的组件，`src/sync.js` 自动同步，`src/appServer.js` app-server 客户端，`src/sessions.js` 会话记录读取，`src/cdp.js` 调试协议，`src/launcher.js` 启动器与程序坞，`src/busy.js` 任务检测，`src/commands.js` 各命令的实现，`config/default.json` 默认配置。
 
 欢迎提交 Issue 和 Pull Request，尤其是 Codex 更新后的选择器适配。
 

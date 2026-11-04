@@ -1,7 +1,7 @@
 // 注入到 Codex 主窗口的组件脚本（在页面里运行，不能使用 Node API）
 // 运行前会在前面拼接：window.__codexUsageConfig = {...}
 (() => {
-  const VERSION = '0.4.0';
+  const VERSION = '0.5.0';
   if (window.__codexUsageCountdown && window.__codexUsageCountdown.version === VERSION) return;
   if (window.__codexUsageCountdown) window.__codexUsageCountdown.destroy();
 
@@ -94,8 +94,12 @@
     .bar i { display:block; height:100%; border-radius:3px; transition: width .6s ease; }
     .row { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:3px; }
     .row b { font-weight:500; color:var(--fg); font-variant-numeric:tabular-nums; }
-    .ft { border-top:1px solid var(--line); padding-top:10px; margin-top:2px; font-size:11.5px; color:var(--muted); }
+    .ftw { display:flex; align-items:center; justify-content:space-between; gap:8px; border-top:1px solid var(--line); padding-top:10px; margin-top:2px; }
+    .ft { font-size:11.5px; color:var(--muted); line-height:1.4; }
     .ft.err { color:var(--danger); }
+    .rf { flex-shrink:0; font:inherit; font-size:12px; color:var(--fg); background:transparent; border:1px solid var(--cardborder); border-radius:8px; padding:4px 10px; cursor:pointer; }
+    .rf:hover { background:var(--btnhover); }
+    .rf:disabled { color:var(--muted); cursor:default; background:transparent; }
     @media (prefers-reduced-motion: reduce) { .val, .bar i { transition:none; } }
   `;
 
@@ -116,12 +120,13 @@
       <div class="rail" role="button" tabindex="0" aria-label="查看剩余额度"></div>
       <div class="pop" hidden role="dialog" aria-label="剩余额度">
         <div class="hd"><span>剩余额度</span><button class="x" aria-label="关闭">×</button></div>
-        <div class="body"></div><div class="ft"></div>
+        <div class="body"></div><div class="ftw"><div class="ft"></div><button class="rf" title="立即同步一次（不影响自动同步）">刷新</button></div>
       </div>`;
     const rail = root.querySelector('.rail');
     rail.addEventListener('click', (e) => { e.stopPropagation(); togglePop(); });
     rail.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePop(); } });
     root.querySelector('.x').addEventListener('click', (e) => { e.stopPropagation(); togglePop(false); });
+    root.querySelector('.rf').addEventListener('click', (e) => { e.stopPropagation(); manualRefresh(); });
     renderStructure();
   }
 
@@ -186,6 +191,11 @@
       ft.className = 'ft';
       ft.textContent = `自动同步 · ${fmtAgo(state.syncedAt)}`;
     }
+    const src = state && state.source === 'sessions' ? ' · 来自会话记录' : '';
+    if (state && state.syncedAt && src) ft.textContent += src;
+    const rf = root.querySelector('.rf');
+    rf.disabled = refreshing || typeof window.__codexUsageRefresh !== 'function';
+    rf.textContent = refreshing ? '刷新中…' : '刷新';
     if (popOpen) placePop();
   }
 
@@ -202,6 +212,22 @@
     const pop = root.querySelector('.pop');
     pop.hidden = !popOpen;
     if (popOpen) placePop();
+  }
+
+  // 手动刷新：通知本机的同步程序立即拉取一次；收到新数据或 15 秒后恢复按钮
+  let refreshing = false, refreshTimer = null;
+  function manualRefresh() {
+    if (refreshing || typeof window.__codexUsageRefresh !== 'function') return;
+    refreshing = true;
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => { refreshing = false; tick(); }, 15000);
+    try { window.__codexUsageRefresh(''); } catch {}
+    tick();
+  }
+  function refreshDone() {
+    if (!refreshing) return;
+    refreshing = false;
+    clearTimeout(refreshTimer);
   }
 
   const onDocClick = (e) => { if (popOpen && !e.composedPath().includes(host)) togglePop(false); };
@@ -247,6 +273,7 @@
   window.__codexUsageCountdown = {
     version: VERSION,
     update(payload) {
+      refreshDone();
       const prevCount = state && state.windows ? state.windows.length : -1;
       state = payload;
       const count = payload && payload.windows ? payload.windows.length : 0;
