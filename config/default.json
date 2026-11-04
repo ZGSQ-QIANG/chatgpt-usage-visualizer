@@ -1,0 +1,31 @@
+{
+  "appNames": ["ChatGPT", "Codex"],
+  "launcherName": null,
+  "debugPort": 9222,
+  "codexBin": null,
+  "sessionsDir": "~/.codex/sessions",
+  "pollFocusedSec": 60,
+  "pollBackgroundSec": 300,
+  "staleAfterSec": 600,
+  "busy": {
+    "recentWriteSec": 30,
+    "commandGraceSec": 120,
+    "pollSec": 5
+  },
+  "mount": {
+    "anchorSelectors": [
+      "button[aria-label=\"用量\"]",
+      "button[aria-label=\"Usage\"]"
+    ],
+    "levelsUp": 1,
+    "position": "before"
+  },
+  "targetFilter": {
+    "urlPrefix": "app://-/index.html",
+    "excludeUrlIncludes": ["initialRoute="]
+  },
+  "thresholds": {
+    "warnRemainingPercent": 25,
+    "dangerRemainingPercent": 10
+  }
+}

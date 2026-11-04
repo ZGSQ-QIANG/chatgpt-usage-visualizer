@@ -1,0 +1,40 @@
+{
+  "name": "chatgpt-usage-visualizer",
+  "version": "0.4.0",
+  "description": "在 Codex 桌面端侧边栏显示 5 小时与每周额度的实时倒计时（非官方）",
+  "type": "module",
+  "bin": {
+    "chatgpt-usage": "bin/chatgpt-usage.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "config",
+    "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "install.sh",
+    "uninstall.sh",
+    "CHANGELOG.md",
+    "docs",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node bin/chatgpt-usage.js start",
+    "doctor": "node bin/chatgpt-usage.js doctor",
+    "test": "node --test test/core.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "os": [
+    "darwin"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "usage",
+    "rate-limit",
+    "countdown"
+  ]
+}
