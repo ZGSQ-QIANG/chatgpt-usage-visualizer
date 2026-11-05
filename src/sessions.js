@@ -47,7 +47,7 @@ function findRateLimits(o) {
   return null;
 }
 
-// 备用数据源：只读最近会话文件末尾，提取最后一条额度快照（不读取对话内容）
+// 备用数据源：只读最近会话文件末尾，提取最后一条额度快照（尾部字节可能包含对话，只在本机内存中扫描）
 // 返回 { snapshot, mtime } 或 null
 export function readLatestFromSessions(dir) {
   for (const { full: file, mtime } of newestJsonl(dir)) {

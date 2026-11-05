@@ -60,25 +60,29 @@ async function ensureDebugApp(cfg, { withApp = false } = {}) {
   if (isRunning(app.path)) {
     const b = codexBusy(app, cfg);
     if (withApp) {
-      if (b.busy) {
-        log(`${app.name} 正以普通方式运行，且可能正在执行任务（${b.reason}）`);
-        const choice = askDialog({
+      const choice = askDialog({
+        title: TITLE,
+        message: `显示额度组件需要重启 ${app.name}，这会中断正在运行的任务。\n\n${b.busy ? `检测到可能仍有任务（${b.reason}）。` : '暂未检测到任务，但启发式检测不能保证空闲。'}请确认所有任务已结束后再重启。`,
+        buttons: b.busy ? ['稍后手动重启', '立即重启', '任务完成后确认重启'] : ['稍后手动重启', '立即重启'],
+        defaultButton: '稍后手动重启',
+        cancelButton: '稍后手动重启',
+      });
+      log(`用户选择：${choice || '关闭对话框'}`);
+      if (choice === '任务完成后确认重启') {
+        notify(TITLE, `正在等待 ${app.name} 的任务结束，之后将请你确认重启`);
+        const r = await waitUntilIdle(app, cfg);
+        if (r === 'quit') { log(`${app.name} 已被退出，停止等待`); return CANCELLED; }
+        const ready = askDialog({
           title: TITLE,
-          message: `检测到 ${app.name} 可能正在执行任务（判断依据：${b.reason}）。\n\n显示额度组件需要重启 ${app.name}，现在重启会中断当前任务。\n\n如果你确认当前没有任务在运行（例如只是刚结束一次对话或安装），可以直接点击"立即重启"。\n\n选择"任务完成后自动重启"，会在任务结束后自动重启；选择"稍后手动重启"，可以在方便时退出 ${app.name}，再从程序坞重新打开。`,
-          buttons: ['稍后手动重启', '立即重启', '任务完成后自动重启'],
-          defaultButton: '任务完成后自动重启',
+          message: `暂未检测到活动任务。请确认 ${app.name} 中的任务已结束；重启仍会中断新开始的任务。`,
+          buttons: ['稍后手动重启', '立即重启'],
+          defaultButton: '稍后手动重启',
           cancelButton: '稍后手动重启',
         });
-        log(`用户选择：${choice || '关闭对话框'}`);
-        if (choice === '任务完成后自动重启') {
-          notify(TITLE, `将在 ${app.name} 的任务完成后自动重启`);
-          const r = await waitUntilIdle(app, cfg);
-          if (r === 'quit') { log(`${app.name} 已被退出，停止等待`); return CANCELLED; }
-          notify(TITLE, `任务已完成，正在重启 ${app.name}`);
-        } else if (choice !== '立即重启') {
-          spawnSync('/usr/bin/open', ['-a', app.path]);
-          return CANCELLED;
-        }
+        if (ready !== '立即重启') return CANCELLED;
+      } else if (choice !== '立即重启') {
+        spawnSync('/usr/bin/open', ['-a', app.path]);
+        return CANCELLED;
       }
     } else {
       const warn = b.busy ? `检测到它可能正在执行任务（${b.reason}），` : '';
