@@ -4,7 +4,7 @@ ChatGPT / Codex 桌面端额度可视化工具：在 Codex 左侧栏"用量"按�
 
 <img src="docs/preview-light.png" width="360"> <img src="docs/preview-dark.png" width="360">
 
-> ⚠️ **非官方工具，与 OpenAI 无关。** 本工具通过 Chromium 调试端口向 Codex 界面注入组件，属于对官方客户端的非官方修改，可能违反 OpenAI 的使用条款，请自行评估风险；Codex 更新界面后组件可能暂时失效。
+> 本工具通过 Chromium 调试端口向 Codex 界面注入组件，属于对官方客户端的非官方修改，可能违反 OpenAI 的使用条款，请自行评估风险；Codex 更新界面后组件可能暂时失效。
 
 ## 让 AI 帮你安装
 
