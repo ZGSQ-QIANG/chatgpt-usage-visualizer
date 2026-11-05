@@ -8,7 +8,7 @@ const original = fs.readFileSync(new URL('../src/widget.js', import.meta.url), '
 const source = original.replace(/\}\)\(\);\s*$/, `
   globalThis.widgetTest = {
     preferences: () => ({ style, timeMode, label: railLabel() }),
-    renderStructure, tick,
+    renderStructure, tick, togglePop, onDocClick, onKey, ensureMounted,
     setState: (value) => { state = value; },
     setNodes: (h, r) => { host = h; root = r; },
   };
@@ -22,7 +22,8 @@ function widget({ config = {}, stored = {}, storageError = false } = {}) {
   }
   const context = vm.createContext({
     window: { __codexUsageConfig: config },
-    document: { readyState: 'loading', addEventListener() {} },
+    document: { readyState: 'loading', addEventListener() {}, querySelector: () => ({ parentElement: { before: () => { host.isConnected = true; } } }) },
+    ResizeObserver: class { observe() {} disconnect() {} },
     localStorage: {
       getItem(key) {
         if (storageError) throw new Error('Storage unavailable');
@@ -31,6 +32,7 @@ function widget({ config = {}, stored = {}, storageError = false } = {}) {
     },
     Date: Clock,
     getComputedStyle: () => ({ color: 'rgb(0, 0, 0)' }),
+    innerWidth: 900, innerHeight: 720,
     clearTimeout() {},
     setTimeout() {},
   });
@@ -49,12 +51,19 @@ function widget({ config = {}, stored = {}, storageError = false } = {}) {
     },
     querySelector: (selector) => selector === '.cd' ? cd : null,
   };
-  const nodes = { '.rail': rail, '.rail .cd': cd, '.body': {}, '.ft': {}, '.rf': {} };
-  api.setNodes({ setAttribute() {} }, {
+  const pop = { hidden: true, offsetWidth: 240, offsetHeight: 280, style: {}, topLayer: false,
+    showCount: 0, hideCount: 0,
+    showPopover() { this.topLayer = true; this.showCount++; },
+    hidePopover() { this.topLayer = false; this.hideCount++; },
+    matches(selector) { return selector === ':popover-open' && this.topLayer; },
+  };
+  const nodes = { '.rail': rail, '.rail .cd': cd, '.body': {}, '.ft': {}, '.rf': {}, '.pop': pop };
+  const host = { isConnected: true, setAttribute() {}, getBoundingClientRect: () => ({ right: 48, bottom: 650 }) };
+  api.setNodes(host, {
     querySelector: (selector) => nodes[selector] ?? null,
     querySelectorAll: () => [],
   });
-  return { api, nodes, cd, update: context.window.__codexUsageCountdown.update,
+  return { api, nodes, cd, host, update: context.window.__codexUsageCountdown.update,
     setClock: (value) => { clock = value; } };
 }
 
@@ -158,4 +167,50 @@ test('empty snapshots update loading and error text on tick and recover on fresh
   update({ windows: [], syncedAt: 1_700_000, error: null });
   assert.equal(cd.textContent, '无限制');
   assert.equal(nodes['.ft'].className, 'ft');
+});
+
+
+test('opening details promotes the popup to the top layer outside a clipped sidebar', () => {
+  const { api, nodes } = widget();
+  api.togglePop(true);
+  assert.equal(nodes['.pop'].hidden, false);
+  assert.equal(nodes['.pop'].topLayer, true);
+  assert.equal(nodes['.pop'].showCount, 1);
+  assert.equal(nodes['.pop'].style.left, '58px');
+});
+
+test('closing details removes it from the top layer and reopening works', () => {
+  const { api, nodes } = widget();
+  api.togglePop(true);
+  api.togglePop(false);
+  assert.equal(nodes['.pop'].hidden, true);
+  assert.equal(nodes['.pop'].topLayer, false);
+  assert.equal(nodes['.pop'].hideCount, 1);
+  api.togglePop(true);
+  assert.equal(nodes['.pop'].showCount, 2);
+});
+
+test('outside click and Escape close the top-layer popup without closing on internal clicks', () => {
+  const { api, nodes, host } = widget();
+  api.togglePop(true);
+  api.onDocClick({ composedPath: () => [host] });
+  assert.equal(nodes['.pop'].topLayer, true);
+  api.onDocClick({ composedPath: () => [] });
+  assert.equal(nodes['.pop'].topLayer, false);
+  api.togglePop(true);
+  api.onKey({ key: 'Escape' });
+  assert.equal(nodes['.pop'].topLayer, false);
+});
+
+
+test('remount after native popup dismissal lets the first click reopen details', () => {
+  const { api, nodes, host } = widget();
+  api.togglePop(true);
+  // Browsers automatically remove a native popover from the top layer on detachment.
+  host.isConnected = false;
+  nodes['.pop'].topLayer = false;
+  api.ensureMounted();
+  api.togglePop();
+  assert.equal(nodes['.pop'].hidden, false);
+  assert.equal(nodes['.pop'].topLayer, true);
 });
