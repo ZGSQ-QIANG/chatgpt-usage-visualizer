@@ -19,7 +19,7 @@ const TOOL_PATH = path.join(here, '..', 'bin', 'chatgpt-usage.js');
 export const sidebarConfig = () => buildConfig();
 
 function widgetSource(cfg) {
-  const injectCfg = { mount: cfg.mount, thresholds: cfg.thresholds, staleAfterSec: cfg.staleAfterSec };
+  const injectCfg = { mount: cfg.mount, thresholds: cfg.thresholds, staleAfterSec: cfg.staleAfterSec, style: cfg.style, timeDisplay: cfg.timeDisplay };
   const src = fs.readFileSync(path.join(here, 'widget.js'), 'utf8');
   return `window.__codexUsageConfig = ${JSON.stringify(injectCfg)};\n${src}`;
 }

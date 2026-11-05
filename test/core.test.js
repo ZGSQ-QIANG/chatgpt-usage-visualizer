@@ -135,3 +135,21 @@ test('最近有会话写入时视为忙碌', () => {
   assert.equal(codexBusy(app, { sessionsDir: dir, busy: {} }).busy, false);
 });
 
+
+test('组件样式表包含所有关键规则（防止编辑时误删）', () => {
+  const src = fs.readFileSync(path.join(here, '..', 'src', 'widget.js'), 'utf8');
+  for (const sel of ['.rail {', '.pop {', '.sty {', '.sty button {', '.ftw {', '.rf {', '.bar {', '.ring {', '.ico {']) {
+    assert.ok(src.includes(sel), `缺少样式规则 ${sel}`);
+  }
+});
+
+test('只有每周额度的套餐（如 Pro）只显示每周', () => {
+  for (const raw of [
+    { primary: null, secondary: { used_percent: 40, window_minutes: 10080, resets_at: 1793896079 } },
+    { primary: { used_percent: 40, window_minutes: 10080, resets_at: 1793896079 }, secondary: null },
+    { rateLimits: { primary: null, secondary: { usedPercent: 40, windowDurationMins: 10080, resetsAt: 1793896079 } } },
+  ]) {
+    assert.deepEqual(toDisplayWindows(normalizeSnapshot(raw)).map((w) => w.label), ['每周']);
+  }
+  assert.deepEqual(toDisplayWindows(normalizeSnapshot({ primary: null, secondary: null })), []);
+});

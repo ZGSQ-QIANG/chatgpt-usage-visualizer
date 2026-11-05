@@ -4,6 +4,8 @@
     "Codex"
   ],
   "launcherName": null,
+  "style": "ring",
+  "timeDisplay": "countdown",
   "debugPort": 9222,
   "codexBin": null,
   "sessionsDir": "~/.codex/sessions",

@@ -93,7 +93,7 @@ export function installLauncherApp({ app, name, nodePath, toolPath, extraArgs = 
   <key>CFBundleName</key><string>${xmlEsc(launcherName)}</string>
   <key>CFBundleDisplayName</key><string>${xmlEsc(launcherName)}</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.5.0</string>
+  <key>CFBundleShortVersionString</key><string>0.6.0</string>
   <key>LSUIElement</key><true/>
   ${hasIcon ? '<key>CFBundleIconFile</key><string>AppIcon</string>' : ''}
 </dict></plist>
