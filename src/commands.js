@@ -1,5 +1,4 @@
 // 命令实现：start、relaunch、安装与卸载启动器、环境检查（通过调试端口把额度组件注入 Codex 左侧栏）
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,7 +10,7 @@ import { findApp, isRunning } from './app.js';
 import { findCodexBin } from './appServer.js';
 import { UsageSync } from './sync.js';
 import { Injector, isPortOpen, listTargets, pickMainTargets } from './cdp.js';
-import { launchWithPort, quitApp, installLauncherApp, uninstallLauncherApp, findInstalledLaunchers, LAUNCHER_LOG, dockInstall, dockRestore, relaunchLater } from './launcher.js';
+import { activateApp, launchWithPort, quitApp, installLauncherApp, uninstallLauncherApp, findInstalledLaunchers, LAUNCHER_LOG, dockInstall, dockRestore, relaunchLater } from './launcher.js';
 import { codexBusy, askDialog, notify } from './busy.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -64,7 +63,7 @@ async function ensureDebugApp(cfg, { withApp = false } = {}) {
         log(`${app.name} 正以普通方式运行，且可能正在执行任务（${b.reason}）`);
         const choice = askDialog({
           title: TITLE,
-          message: `检测到 ${app.name} 可能正在执行任务（判断依据：${b.reason}）。\n\n显示额度组件需要重启 ${app.name}，现在重启会中断当前任务。\n\n如果你确认当前没有任务在运行（例如只是刚结束一次对话或安装），可以直接点击"立即重启"。\n\n选择"任务完成后自动重启"，会在任务结束后自动重启；选择"稍后手动重启"，可以在方便时退出 ${app.name}，再从程序坞重新打开。`,
+          message: `检测到 ${app.name} 可能正在执行任务（判断依据：${b.reason}）。\n\n显示额度组件需要重启 ${app.name}，现在重启会中断当前任务。\n\n如果你确认当前没有任务在运行（例如只是刚结束一次对话或安装），可以直接点击"立即重启"。\n\n选择"任务完成后自动重启"，会在任务结束后自动重启；选择"稍后手动重启"，可以在方便时退出 ${app.name}，再从启动器重新打开。`,
           buttons: ['稍后手动重启', '立即重启', '任务完成后自动重启'],
           defaultButton: '任务完成后自动重启',
           cancelButton: '稍后手动重启',
@@ -76,7 +75,7 @@ async function ensureDebugApp(cfg, { withApp = false } = {}) {
           if (r === 'quit') { log(`${app.name} 已被退出，停止等待`); return CANCELLED; }
           notify(TITLE, `任务已完成，正在重启 ${app.name}`);
         } else if (choice !== '立即重启') {
-          spawnSync('/usr/bin/open', ['-a', app.path]);
+          activateApp(app);
           return CANCELLED;
         }
       }
@@ -109,7 +108,7 @@ export async function start() {
   if (!locked) {
     // 已有实例在运行（或正在等待任务结束）：只需把 Codex 调到前台
     const a = findApp(cfg.appNames);
-    if (withApp && a) spawnSync('/usr/bin/open', ['-a', a.path]);
+    if (withApp && a) activateApp(a);
     log('组件已在运行，无需重复启动。');
     return;
   }
@@ -165,7 +164,7 @@ export async function start() {
     if (withApp && !portOpen) {
       if (++closedChecks >= 2) {
         const reopened = app && isRunning(app.path);
-        return shutdown(reopened ? 'Codex 已退出并以普通方式重新打开，组件停止；请从程序坞重新打开以显示组件。' : 'Codex 已退出，组件随之停止。');
+        return shutdown(reopened ? 'Codex 已退出并以普通方式重新打开，组件停止；请从启动器重新打开以显示组件。' : 'Codex 已退出，组件随之停止。');
       }
       return;
     }
@@ -196,12 +195,24 @@ export async function start() {
 const LOCK = path.join(os.homedir(), '.chatgpt-usage-visualizer', 'run.pid');
 function acquireLock() {
   fs.mkdirSync(path.dirname(LOCK), { recursive: true });
-  try {
-    const pid = Number(fs.readFileSync(LOCK, 'utf8'));
-    if (pid && pid !== process.pid) { process.kill(pid, 0); return false; }
-  } catch {}
-  fs.writeFileSync(LOCK, String(process.pid));
-  return true;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      fs.writeFileSync(LOCK, String(process.pid), { flag: 'wx' });
+      process.once('exit', releaseLock);
+      return true;
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      let pid;
+      try { pid = Number(fs.readFileSync(LOCK, 'utf8')); } catch { continue; }
+      // Another process may still be writing the PID: leave an empty lock alone.
+      if (!pid) return false;
+      try { process.kill(pid, 0); return false; } catch (err) {
+        if (err.code !== 'ESRCH') return false;
+      }
+      try { fs.unlinkSync(LOCK); } catch {}
+    }
+  }
+  return false;
 }
 function releaseLock() {
   try { if (Number(fs.readFileSync(LOCK, 'utf8')) === process.pid) fs.unlinkSync(LOCK); } catch {}
@@ -213,12 +224,14 @@ export async function installSidebar(cfg, app) {
     name: opt('launcher-name') || cfg.launcherName,
     nodePath: process.execPath,
     toolPath: TOOL_PATH,
-    extraArgs: [opt('app') ? ['--app', opt('app')] : [], opt('port') ? ['--port', opt('port')] : []].flat(),
+    extraArgs: [opt('app') ? ['--app', opt('app')] : [], opt('port') ? ['--port', opt('port')] : [], opt('codex-bin') ? ['--codex-bin', opt('codex-bin')] : []].flat(),
   });
   const dest = launcher.path;
   console.log(`✓ 侧栏组件：已创建启动器"${launcher.name}"：${dest}`);
 
-  if (flag('dock')) {
+  if (process.platform === 'win32') {
+    console.log('✓ 开始菜单快捷方式已创建，可手动固定到任务栏');
+  } else if (flag('dock')) {
     try {
       const r = dockInstall(app.path, dest, launcher.removed);
       console.log({
@@ -237,7 +250,7 @@ export async function installSidebar(cfg, app) {
     relaunchLater(dest, Number(opt('relaunch-delay') || 15));
     console.log(`✓ 将在 ${opt('relaunch-delay') || 15} 秒后通过启动器重新打开 ${app.name}（如正在运行会先退出）`);
   } else {
-    console.log(`· 侧栏组件需要退出 ${app.name} 后从程序坞的启动器重新打开才会出现`);
+    console.log(`· 侧栏组件需要退出 ${app.name} 后从安装的启动器重新打开才会出现`);
   }
   console.log(`  日志：${LAUNCHER_LOG}`);
   return dest;

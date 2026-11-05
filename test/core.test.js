@@ -56,7 +56,7 @@ test('从会话记录末尾读取最新额度', () => {
 });
 
 test('app-server 握手、读取与推送', async () => {
-  const c = new AppServerClient(path.join(here, 'fake-codex.js'));
+  const c = new AppServerClient([process.execPath, path.join(here, 'fake-codex.js')]);
   const pushed = new Promise((res) => c.on('rateLimits', res));
   await c.start();
   const snap = await c.readRateLimits();
@@ -78,7 +78,7 @@ test('app-server 临时失败时保留较新的数据，并尽快重试', async 
   process.env.FAKE_FAIL_FILE = failFlag;
   const logs = [];
   const sync = new UsageSync({ cfg: { sessionsDir: dir, pollFocusedSec: 60, pollBackgroundSec: 300 },
-    codexBin: path.join(here, 'fake-codex.js'), log: (m) => logs.push(m) });
+    codexBin: [process.execPath, path.join(here, 'fake-codex.js')], log: (m) => logs.push(m) });
   try {
   await sync.start();
   assert.equal(sync.source, 'app-server');

@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { findWindowsApp, windowsProcesses } from './windows.js';
 
 const USER_APPS = path.join(os.homedir(), 'Applications');
 // 本工具生成的 .app（启动器，以及旧版本的菜单栏程序）都带这个 bundle id 前缀
@@ -19,6 +20,7 @@ export function isGeneratedApp(appPath) {
 
 // 依次在常见目录和 Spotlight 中查找桌面端应用（跳过本工具生成的应用）
 export function findApp(names) {
+  if (process.platform === 'win32') return findWindowsApp(names);
   const dirs = ['/Applications', USER_APPS];
   for (const n of names) {
     for (const d of dirs) {
@@ -39,6 +41,9 @@ export function findApp(names) {
 const reEscape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export function isRunning(appPath) {
+  if (process.platform === 'win32') {
+    return windowsProcesses().some((p) => p.executable?.toLowerCase() === appPath.toLowerCase());
+  }
   // 从行首精确匹配，避免把 ~/Applications 下的同名启动器误认为原应用
   const r = spawnSync('/usr/bin/pgrep', ['-f', `^${reEscape(path.join(appPath, 'Contents', 'MacOS'))}/`]);
   return r.status === 0;

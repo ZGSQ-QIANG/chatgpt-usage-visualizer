@@ -2,6 +2,12 @@
 
 当用户把本仓库地址交给你并要求安装时，按以下步骤操作。整个过程不需要 sudo，不要修改 ChatGPT.app / Codex.app 本身，不要读取或输出 `~/.codex/auth.json` 等凭证文件。
 
+## Windows
+
+Windows 安装使用同一仓库。先执行 `node -v` 确认 Node.js 22+，再执行 `node bin/chatgpt-usage.js doctor`、`powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1`。安装成功输出 `INSTALL_RESULT=ok`；找不到桌面端时用 `--app` 指定 .exe 完整路径。
+
+安装会创建开始菜单中的 `ChatGPT (Usage)` 或 `Codex (Usage)` 快捷方式。告诉用户保存任务、退出 Codex 后从该快捷方式重新打开；若当前助手就在 Codex 内运行，不要在开发验证时关闭自身宿主。Windows 日志在 `%LOCALAPPDATA%\chatgpt-usage-visualizer\logs\chatgpt-usage-visualizer.log`。卸载前先退出 Codex，然后运行 `powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1`。以下步骤为 macOS 专用。
+
 ## 目标
 
 在用户的 macOS 上安装 Codex 侧栏额度组件：在 `~/Applications` 下生成一个与原应用同名同图标的启动器、替换程序坞中的原图标，之后用户照常从程序坞打开 Codex，左侧栏用量按钮上方就会显示额度组件。
@@ -9,7 +15,7 @@
 ## 步骤
 
 ### 1. 确认系统
-运行 `uname`，结果必须是 `Darwin`。否则告诉用户本工具仅支持 macOS，停止。
+运行 `uname`，macOS 结果为 `Darwin`。Windows 使用上面的 Windows 流程；其他系统停止。
 
 ### 2. 获取代码（固定放在 `~/chatgpt-usage-visualizer`）
 ```bash

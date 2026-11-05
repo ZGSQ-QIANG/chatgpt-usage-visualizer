@@ -17,18 +17,21 @@
     "CLAUDE.md",
     "install.sh",
     "uninstall.sh",
-    "LICENSE"
+    "LICENSE",
+    "install.ps1",
+    "uninstall.ps1"
   ],
   "scripts": {
     "start": "node bin/chatgpt-usage.js start",
     "doctor": "node bin/chatgpt-usage.js doctor",
-    "test": "node --test test/core.test.js"
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=22"
   },
   "os": [
-    "darwin"
+    "darwin",
+    "win32"
   ],
   "license": "MIT",
   "keywords": [

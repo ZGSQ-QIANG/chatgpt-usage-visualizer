@@ -13,18 +13,19 @@ export function findCodexBin(cfg, appPath) {
   const candidates = [];
   if (cfg.codexBin) candidates.push(cfg.codexBin);
   if (appPath) {
-    for (const sub of ['Resources', 'MacOS']) {
-      const found = searchExecutable(path.join(appPath, 'Contents', sub), 'codex', 5);
+    const dirs = process.platform === 'win32' ? [path.join(path.dirname(appPath), 'resources')] : ['Resources', 'MacOS'].map((sub) => path.join(appPath, 'Contents', sub));
+    for (const dir of dirs) {
+      const found = searchExecutable(dir, process.platform === 'win32' ? 'codex.exe' : 'codex', 5);
       if (found) candidates.push(found);
     }
   }
   try {
-    const p = execFileSync('/usr/bin/which', ['codex'], { encoding: 'utf8' }).trim();
-    if (p) candidates.push(p);
+    const p = execFileSync(process.platform === 'win32' ? 'where.exe' : '/usr/bin/which', [process.platform === 'win32' ? 'codex.exe' : 'codex'], { encoding: 'utf8', windowsHide: true }).trim();
+    candidates.push(...p.split(/\r?\n/).filter(Boolean));
   } catch {}
   for (const c of candidates) {
     try {
-      execFileSync(c, ['--version'], { stdio: 'ignore', timeout: 10000 });
+      execFileSync(c, ['--version'], { stdio: 'ignore', timeout: 10000, windowsHide: true });
       return c;
     } catch {}
   }
@@ -63,7 +64,8 @@ export class AppServerClient extends EventEmitter {
   }
 
   async start() {
-    this.proc = spawn(this.bin, ['app-server'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const [bin, ...prefix] = Array.isArray(this.bin) ? this.bin : [this.bin];
+    this.proc = spawn(bin, [...prefix, 'app-server'], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     this.proc.on('exit', (code) => {
       for (const { reject } of this.pending.values()) reject(new Error(`app-server 已退出 (${code})`));
       this.pending.clear();

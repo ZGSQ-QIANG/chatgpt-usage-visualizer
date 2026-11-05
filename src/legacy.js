@@ -11,6 +11,7 @@ const MENUBAR_PLIST = path.join(HOME, 'Library', 'LaunchAgents', `${MENUBAR_LABE
 
 // 返回是否清理了任何东西
 export function cleanupLegacyMenubar() {
+  if (process.platform !== 'darwin') return false;
   if (!fs.existsSync(MENUBAR_APP) && !fs.existsSync(MENUBAR_PLIST)) return false;
   spawnSync('/bin/launchctl', ['bootout', `gui/${process.getuid()}/${MENUBAR_LABEL}`], { stdio: 'ignore' });
   fs.rmSync(MENUBAR_PLIST, { force: true });
