@@ -12,23 +12,22 @@
   const RING_C = 2 * Math.PI * 15;
   // 侧栏图标样式：只影响外观，不影响数据与功能
   const STYLES = { ring: '圆环', hourglass: '沙漏', coffee: '咖啡', battery: '电池' };
-  const hasChoice = (choices, value) => typeof value === 'string' && Object.hasOwn(choices, value);
   const STYLE_KEY = 'chatgpt-usage-visualizer:style';
   let style = (() => {
     try {
       let v = localStorage.getItem(STYLE_KEY);
       if (v === 'candle') v = 'battery'; // 旧版本的蜡烛样式已替换为电池
-      if (hasChoice(STYLES, v)) return v;
+      if (STYLES[v]) return v;
     } catch {}
-    return hasChoice(STYLES, CFG.style) ? CFG.style : 'ring';
+    return STYLES[CFG.style] ? CFG.style : 'ring';
   })();
   const prevRemaining = [], flowUntil = [];
   // 时间显示方式：距重置（倒计时）或截止时间（具体的重置时刻）
   const TIME_MODES = { countdown: '距重置', deadline: '截止时间' };
   const TIME_KEY = 'chatgpt-usage-visualizer:time';
   let timeMode = (() => {
-    try { const v = localStorage.getItem(TIME_KEY); if (hasChoice(TIME_MODES, v)) return v; } catch {}
-    return hasChoice(TIME_MODES, CFG.timeDisplay) ? CFG.timeDisplay : 'countdown';
+    try { const v = localStorage.getItem(TIME_KEY); if (TIME_MODES[v]) return v; } catch {}
+    return TIME_MODES[CFG.timeDisplay] ? CFG.timeDisplay : 'countdown';
   })();
 
   // 沙漏玻璃是收腰的，沙子高度和体积不成正比。按玻璃轮廓（与 iconMarkup 中的曲线一致）
@@ -152,7 +151,7 @@
     .sep { width:70%; height:1px; background:var(--line); margin-top:2px; }
     .s-ok { stroke:var(--ok); } .s-warn { stroke:var(--warn); } .s-danger { stroke:var(--danger); } .s-stale { stroke:var(--stale); }
     .b-ok { background:var(--ok); } .b-warn { background:var(--warn); } .b-danger { background:var(--danger); } .b-stale { background:var(--stale); }
-    .pop { position:fixed; inset:auto; margin:0; z-index:2147483000; width:240px; background:var(--card); border:1px solid var(--cardborder); border-radius:14px; padding:16px 16px 12px; box-shadow:0 8px 28px rgba(0,0,0,.14); color:var(--fg); }
+    .pop { position:fixed; z-index:2147483000; width:240px; background:var(--card); border:1px solid var(--cardborder); border-radius:14px; padding:16px 16px 12px; box-shadow:0 8px 28px rgba(0,0,0,.14); color:var(--fg); }
     .pop[hidden] { display:none; }
     .hd { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:14px; font-weight:600; }
     .x { border:0; background:transparent; color:var(--muted); font-size:16px; width:24px; height:24px; border-radius:6px; cursor:pointer; line-height:1; }
@@ -239,7 +238,7 @@
     root = host.attachShadow({ mode: 'open' });
     root.innerHTML = `<style>${CSS}</style>
       <div class="rail" role="button" tabindex="0" aria-label="查看剩余额度"></div>
-      <div class="pop" popover="manual" hidden role="dialog" aria-label="剩余额度">
+      <div class="pop" hidden role="dialog" aria-label="剩余额度">
         <div class="hd"><span>剩余额度</span><button class="x" aria-label="关闭">×</button></div>
         <div class="body"></div><div class="sty"><span>样式</span>${Object.entries(STYLES).map(([k, v]) => `<button data-style="${k}">${v}</button>`).join('')}</div><div class="sty tm"><span>时间</span>${Object.entries(TIME_MODES).map(([k, v]) => `<button data-time="${k}">${v}</button>`).join('')}</div><div class="ftw"><div class="ft"></div><button class="rf" title="立即同步一次（不影响自动同步）">刷新</button></div>
       </div>`;
@@ -383,7 +382,7 @@
           ${style === 'ring' ? iconMarkup(i) : `<div class="ico ico-${style}">${iconMarkup(i)}</div><span class="pct2"></span>`}
           <span class="lbl">${railLabel()}</span><span class="cd"></span>
         </div>`).join('') + '<div class="sep"></div>'
-      : `<div class="w"><span class="lbl">额度</span><span class="cd">同步中…</span></div><div class="sep"></div>`;
+      : `<div class="w"><span class="lbl">额度</span><span class="cd">${state && state.syncedAt && !state.error ? '无限制' : '同步中…'}</span></div><div class="sep"></div>`;
     root.querySelectorAll('.sty button[data-style]').forEach((b) => b.classList.toggle('on', b.dataset.style === style));
     root.querySelectorAll('.sty button[data-time]').forEach((b) => b.classList.toggle('on', b.dataset.time === timeMode));
     prevRemaining.length = 0;
@@ -401,12 +400,6 @@
     if (!root) return;
     host.setAttribute('data-theme', isDark() ? 'dark' : 'light');
     const ws = windowsView();
-    if (!ws.length) {
-      const cd = root.querySelector('.rail .cd');
-      if (cd) cd.textContent = state && state.error ? '同步失败'
-        : !state || !state.syncedAt ? '同步中…'
-        : now() - state.syncedAt > STALE_MS ? '数据已过期' : '无限制';
-    }
     ws.forEach((w, i) => {
       const r = root.querySelector(`.rail .w[data-i="${i}"]`);
       if (r) {
@@ -463,14 +456,8 @@
   function togglePop(force) {
     popOpen = force === undefined ? !popOpen : force;
     const pop = root.querySelector('.pop');
-    if (popOpen) pop.hidden = false;
-    // 顶层弹窗不受侧栏的 contain:paint / overflow 裁剪，收起侧栏时也可显示。
-    if (typeof pop.showPopover === 'function') {
-      if (popOpen && !pop.matches(':popover-open')) pop.showPopover();
-      else if (!popOpen && pop.matches(':popover-open')) pop.hidePopover();
-    }
+    pop.hidden = !popOpen;
     if (popOpen) placePop();
-    else pop.hidden = true;
   }
 
   // 手动刷新：通知本机的同步程序立即拉取一次；收到新数据或 15 秒后恢复按钮
@@ -507,8 +494,6 @@
     if (!anchor) return;
     let target = anchor;
     for (let i = 0; i < (MOUNT.levelsUp || 0) && target.parentElement; i++) target = target.parentElement;
-    // 脱离文档会让浏览器关闭顶层弹窗；重挂载前同步逻辑状态，避免下一次点击只关不弹。
-    if (host && popOpen) togglePop(false);
     if (!host) build();
     if (MOUNT.position === 'after') target.after(host);
     else target.before(host);

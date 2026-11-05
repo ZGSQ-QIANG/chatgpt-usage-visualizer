@@ -1,42 +1,14 @@
 // 极简 CDP 客户端：使用 Node 22 内置 WebSocket，无第三方依赖
 
-function validatePort(port) {
-  if ((typeof port !== 'number' && (typeof port !== 'string' || !/^\d+$/.test(port))) ||
-      !Number.isInteger(Number(port)) || Number(port) < 1 || Number(port) > 65535) {
-    throw new Error('无效调试端口');
-  }
-  return Number(port);
-}
-
-function validateEndpoint(url, port) {
-  // 仅允许字面量回环地址；不解析 localhost，避免依赖 DNS 或接受 IPv4 别名。
-  const authority = typeof url === 'string' && url.match(/^ws:\/\/(127\.0\.0\.1|\[::1\]):(\d+)(?:\/|$)/);
-  if (!authority || Number(authority[2]) !== validatePort(port)) throw new Error('不可信的 CDP 地址');
-  const endpoint = new URL(url);
-  if (endpoint.protocol !== 'ws:' || endpoint.username || endpoint.password ||
-      !['127.0.0.1', '[::1]'].includes(endpoint.hostname)) throw new Error('不可信的 CDP 地址');
-}
-
 export async function listTargets(port) {
-  const res = await fetch(`http://127.0.0.1:${validatePort(port)}/json/list`, {
-    redirect: 'error', signal: AbortSignal.timeout(1500),
-  });
+  const res = await fetch(`http://127.0.0.1:${port}/json/list`);
   if (!res.ok) throw new Error(`调试端口返回 ${res.status}`);
-  const targets = await res.json();
-  if (!Array.isArray(targets) || !targets.every((target) => target && typeof target === 'object' &&
-      typeof target.id === 'string' && target.id.length > 0 && typeof target.type === 'string' &&
-      typeof target.url === 'string' &&
-      (target.webSocketDebuggerUrl === undefined || typeof target.webSocketDebuggerUrl === 'string'))) {
-    throw new Error('无效 CDP 窗口列表');
-  }
-  return targets;
+  return res.json();
 }
 
 export async function isPortOpen(port) {
   try {
-    const res = await fetch(`http://127.0.0.1:${validatePort(port)}/json/version`, {
-      redirect: 'error', signal: AbortSignal.timeout(1500),
-    });
+    const res = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1500) });
     return res.ok;
   } catch {
     return false;
@@ -79,8 +51,7 @@ class CdpSession {
     });
   }
 
-  static connect(url, port) {
-    validateEndpoint(url, port);
+  static connect(url) {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(url);
       ws.addEventListener('open', () => resolve(new CdpSession(ws)), { once: true });
@@ -135,7 +106,7 @@ export class Injector {
     for (const t of targets) {
       if (this.sessions.has(t.id)) continue;
       try {
-        const s = await CdpSession.connect(t.webSocketDebuggerUrl, this.port);
+        const s = await CdpSession.connect(t.webSocketDebuggerUrl);
         this.sessions.set(t.id, s);
         s.on('close', () => this.sessions.delete(t.id));
         s.on('Page.loadEventFired', () => this.#pushTo(s).catch(() => {}));

@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import childProcess from 'node:child_process';
-import { syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { normalizeSnapshot, mergeSnapshot, toDisplayWindows, windowLabel } from '../src/normalize.js';
 import { readLatestFromSessions } from '../src/sessions.js';
@@ -70,14 +68,12 @@ test('app-server 握手、读取与推送', async () => {
 
 import { UsageSync } from '../src/sync.js';
 
-test('app-server 临时失败时保留较新的数据，并尽快重试', async (t) => {
-  // 此用例验证同步恢复；目录事件使用桩，避免依赖系统 watcher 配额。
-  t.mock.method(fs, 'watch', () => ({ close() {} }));
+test('app-server 临时失败时保留较新的数据，并尽快重试', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuc-sync-'));
   const old = path.join(dir, 'rollout-old.jsonl');
   fs.writeFileSync(old, JSON.stringify({ payload: { rate_limits: ROLLOUT } }) + '\n');
-  const oldTime = (Date.now() - 3600000) / 1000;
-  fs.utimesSync(old, oldTime, oldTime); // 一小时前的旧记录
+  const t = (Date.now() - 3600000) / 1000;
+  fs.utimesSync(old, t, t); // 一小时前的旧记录
   const failFlag = path.join(dir, 'fail');
   process.env.FAKE_FAIL_FILE = failFlag;
   const logs = [];
@@ -93,7 +89,7 @@ test('app-server 临时失败时保留较新的数据，并尽快重试', async 
   assert.ok(sync.syncedAt >= goodAt);             // 仍是 app-server 的数据（期间的推送可能让时间略晚）
   assert.equal(sync.payload().error, '同步失败');
   assert.equal(sync.failures, 1);                    // 30 秒后重试
-  fs.writeFileSync(failFlag, '0');
+  fs.rmSync(failFlag);
   await sync.refresh('测试');
   assert.equal(sync.payload().error, null);
   assert.ok(logs.some((l) => l.includes('已恢复')));
@@ -118,7 +114,7 @@ test('识别 Codex 正在运行的命令，排除常驻 MCP 服务和应用自�
   const procs = [
     { pid: 1, ppid: 0, age: 3600, command: `${APP}/Contents/MacOS/ChatGPT` },
     { pid: 2, ppid: 1, age: 3590, command: `${APP}/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex app-server` },
-    { pid: 3, ppid: 2, age: 3585, command: 'npx @modelcontextprotocol/server-filesystem /synthetic' },
+    { pid: 3, ppid: 2, age: 3585, command: 'npx some-mcp-server' },
     { pid: 4, ppid: 2, age: 3580, command: `${APP}/Contents/Frameworks/helper` },
   ];
   assert.equal(runningCommands(APP, procs).length, 0);
@@ -128,10 +124,7 @@ test('识别 Codex 正在运行的命令，排除常驻 MCP 服务和应用自�
   assert.deepEqual(found.map((p) => p.pid).sort(), [5, 6]);
 });
 
-test('最近有会话写入时视为忙碌', (t) => {
-  t.mock.method(childProcess, 'execFileSync', () => '1 0 01:00:00 /usr/bin/synthetic-process');
-  syncBuiltinESMExports();
-  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+test('最近有会话写入时视为忙碌', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuc-busy-'));
   const f = path.join(dir, 'rollout-x.jsonl');
   fs.writeFileSync(f, '{}\n');

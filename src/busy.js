@@ -4,8 +4,8 @@ import path from 'node:path';
 
 // 判断 Codex 是否可能正在执行任务（启发式，两条满足其一即视为忙碌）：
 // 1. 最近 recentWriteSec 秒（默认 30）内有会话记录写入（模型正在回复或刚执行完步骤）
-// 2. Codex 内置的 codex 进程下有未知的活动命令（如构建、测试）。
-//    只排除可识别的 MCP 服务本身，不能按启动时间永久忽略早期开始的任务。
+// 2. Codex 内置的 codex 进程下有正在运行的命令（如构建、测试），
+//    且该命令是在 codex 进程启动 commandGraceSec 秒之后才启动的（排除随 Codex 一起启动的常驻 MCP 服务）
 
 function parseEtime(s) {
   // macOS ps 的 etime 格式：[[dd-]hh:]mm:ss
@@ -19,39 +19,28 @@ export function listProcesses() {
   try {
     out = execFileSync('/bin/ps', ['-axo', 'pid=,ppid=,etime=,command='], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
   } catch {
-    return null;
+    return [];
   }
-  const procs = out.split('\n').map((l) => l.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/)).filter(Boolean)
+  return out.split('\n').map((l) => l.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/)).filter(Boolean)
     .map((m) => ({ pid: Number(m[1]), ppid: Number(m[2]), age: parseEtime(m[3]), command: m[4] }));
-  return procs.length ? procs : null;
 }
 
-function isKnownMcpService(command) {
-  // 只识别明确的官方服务入口；shell 包装器和未知服务均保守视为活动任务。
-  return /^(?:\S*\/)?npx\s+(?:(?:-y|--yes)\s+)?@modelcontextprotocol\/server-[\w-]+(?:\s|$)/.test(command)
-    || /^(?:\S*\/)?node\s+\S*\/@modelcontextprotocol\/server-[\w-]+\/(?:dist|build)\/\S+\.js(?:\s|$)/.test(command);
-}
-
-export function runningCommands(appPath, procs = listProcesses()) {
-  if (!procs) return null;
+export function runningCommands(appPath, procs = listProcesses(), graceSec = 120) {
   const inApp = (p) => p.command.startsWith(appPath + '/');
-  const roots = procs.filter((p) => inApp(p) && /\/codex(?:\s|$)/.test(p.command.slice(appPath.length)));
+  const roots = procs.filter((p) => inApp(p) && path.basename(p.command.split(' ')[0]) === 'codex');
   const children = new Map();
   for (const p of procs) {
     if (!children.has(p.ppid)) children.set(p.ppid, []);
     children.get(p.ppid).push(p);
   }
   const found = [];
-  const visited = new Set();
   for (const root of roots) {
     const stack = [...(children.get(root.pid) || [])];
     while (stack.length) {
       const p = stack.pop();
-      if (visited.has(p.pid)) continue;
-      visited.add(p.pid);
       stack.push(...(children.get(p.pid) || []));
-      if (inApp(p) || isKnownMcpService(p.command)) continue;
-      found.push(p);
+      if (inApp(p) || p.age === null || root.age === null) continue;
+      if (root.age - p.age > graceSec) found.push(p);
     }
   }
   return found;
@@ -80,8 +69,7 @@ export function codexBusy(app, cfg) {
   const b = cfg.busy || {};
   const writeAge = newestSessionWriteAgeSec(cfg.sessionsDir);
   if (writeAge < (b.recentWriteSec ?? 30)) return { busy: true, reason: `${Math.round(writeAge)} 秒前有会话写入` };
-  const cmds = runningCommands(app.path);
-  if (!cmds) return { busy: true, reason: '无法确认进程状态，请手动确认任务已结束' };
+  const cmds = runningCommands(app.path, listProcesses(), b.commandGraceSec ?? 120);
   if (cmds.length) return { busy: true, reason: `正在运行命令：${cmds[0].command.slice(0, 60)}` };
   return { busy: false, reason: '' };
 }

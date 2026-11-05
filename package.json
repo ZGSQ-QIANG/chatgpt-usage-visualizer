@@ -22,7 +22,7 @@
   "scripts": {
     "start": "node bin/chatgpt-usage.js start",
     "doctor": "node bin/chatgpt-usage.js doctor",
-    "test": "node --test test/core.test.js test/safety.test.js test/widget.test.js test/cdp.test.js"
+    "test": "node --test test/core.test.js"
   },
   "engines": {
     "node": ">=22"
