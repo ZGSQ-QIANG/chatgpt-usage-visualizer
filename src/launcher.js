@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { isPortOpen } from './cdp.js';
 import { isRunning, bundleId } from './app.js';
+import { isOwnedApp } from './ownership.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -14,12 +15,7 @@ const LAUNCHER_DIR = path.join(os.homedir(), 'Applications');
 
 // 判断某个 .app 是否是本工具生成的启动器（启动器可能与原应用同名）
 export function isOurLauncher(appPath) {
-  try {
-    const plist = fs.readFileSync(path.join(appPath, 'Contents', 'Info.plist'), 'utf8');
-    return [LAUNCHER_ID, ...LEGACY_LAUNCHER_IDS].some((id) => plist.includes(id));
-  } catch {
-    return false;
-  }
+  return isOwnedApp(appPath, [LAUNCHER_ID, ...LEGACY_LAUNCHER_IDS]);
 }
 
 export function findInstalledLaunchers() {
@@ -59,6 +55,9 @@ const xmlEsc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').rep
 // 返回 { path, removed }：removed 为被替换掉的旧启动器路径（用于更新程序坞）
 export function installLauncherApp({ app, name, nodePath, toolPath, extraArgs = [] }) {
   const launcherName = name || app.name;
+  if (typeof launcherName !== 'string' || !launcherName.trim() || /[/\\\0]/.test(launcherName) || ['.', '..'].includes(launcherName)) {
+    throw new Error('启动器名称必须是不含路径分隔符的应用名称');
+  }
   const LAUNCHER_PATH = path.join(LAUNCHER_DIR, `${launcherName}.app`);
   if (path.resolve(LAUNCHER_PATH) === path.resolve(app.path)) {
     throw new Error(`${app.path} 是原应用本身，请用 --launcher-name 换一个启动器名称`);

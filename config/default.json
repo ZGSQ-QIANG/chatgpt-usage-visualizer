@@ -14,7 +14,6 @@
   "staleAfterSec": 600,
   "busy": {
     "recentWriteSec": 30,
-    "commandGraceSec": 120,
     "pollSec": 5
   },
   "mount": {

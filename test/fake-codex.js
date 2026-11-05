@@ -6,7 +6,8 @@ const out = (m) => process.stdout.write(JSON.stringify(m) + '\n');
 readline.createInterface({ input: process.stdin }).on('line', (l) => {
   const m = JSON.parse(l);
   if (m.method === 'initialize') out({ id: m.id, result: { userAgent: 'fake' } });
-  if (m.method === 'account/rateLimits/read' && process.env.FAKE_FAIL_FILE && fs.existsSync(process.env.FAKE_FAIL_FILE)) {
+  if (m.method === 'account/rateLimits/read' && process.env.FAKE_FAIL_FILE && fs.existsSync(process.env.FAKE_FAIL_FILE)
+      && fs.readFileSync(process.env.FAKE_FAIL_FILE, 'utf8').trim() === '1') {
     out({ id: m.id, error: { code: -1, message: 'failed to fetch codex rate limits: error sending request' } });
     return;
   }
