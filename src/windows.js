@@ -74,6 +74,44 @@ const manifestPath = () => path.join(dataDir(), 'launcher.json');
 export const getWindowsLog = () => path.join(dataDir(), 'logs', 'chatgpt-usage-visualizer.log');
 export const windowsLog = getWindowsLog();
 
+// IShellLinkW/IPersistFile use Unicode paths on every Windows locale. WScript's
+// shortcut Save converts filenames to the system ANSI code page on some systems.
+const SHELL_LINK = `Add-Type -TypeDefinition @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+[ComImport, Guid("00021401-0000-0000-C000-000000000046")] class UsageShellLink {}
+[ComImport, Guid("000214F9-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IUsageShellLinkW {
+ void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder s, int n, IntPtr data, uint flags);
+ void GetIDList(out IntPtr p); void SetIDList(IntPtr p);
+ void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder s, int n);
+ void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string s);
+ void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder s, int n);
+ void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string s);
+ void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder s, int n);
+ void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string s);
+ void GetHotkey(out short key); void SetHotkey(short key);
+ void GetShowCmd(out int cmd); void SetShowCmd(int cmd);
+ void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder s, int n, out int index);
+ void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string s, int index);
+ void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string s, uint reserved);
+ void Resolve(IntPtr hwnd, uint flags);
+ void SetPath([MarshalAs(UnmanagedType.LPWStr)] string s);
+}
+public static class UsageShortcut {
+ public static void Save(string file, string target, string args, string cwd, string icon) {
+  var link = (IUsageShellLinkW)new UsageShellLink();
+  try {
+   link.SetPath(target); link.SetArguments(args); link.SetWorkingDirectory(cwd);
+   link.SetIconLocation(icon, 0); link.SetDescription("Codex Usage Visualizer"); link.SetShowCmd(7);
+   ((IPersistFile)link).Save(file, true);
+  } finally { Marshal.FinalReleaseComObject(link); }
+ }
+}
+'@;`;
+
 function readManifest() {
   try { return JSON.parse(fs.readFileSync(manifestPath(), 'utf8')); } catch { return null; }
 }
@@ -98,10 +136,7 @@ export function installWindowsLauncher({ app, name, nodePath, toolPath, extraArg
   const args = [toolPath, 'start', '--with-app', '--yes', ...extraArgs].map(psQuote).join(' ');
   const script = `& ${psQuote(nodePath)} ${args} *>> ${psQuote(logPath)}`;
   const shortcutArgs = `-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand ${encoded(script)}`;
-  runPowerShell(`$s=(New-Object -ComObject WScript.Shell).CreateShortcut(${psQuote(dest)});
-    $s.TargetPath=${psQuote(powershell)}; $s.Arguments=${psQuote(shortcutArgs)};
-    $s.WorkingDirectory=${psQuote(path.dirname(toolPath))}; $s.IconLocation=${psQuote(app.path + ',0')};
-    $s.Description='Codex 额度组件'; $s.WindowStyle=7; $s.Save()`);
+  runPowerShell(`${SHELL_LINK}\n[UsageShortcut]::Save(${[dest, powershell, shortcutArgs, path.dirname(toolPath), app.path].map(psQuote).join(',')})`);
   fs.writeFileSync(manifestPath(), JSON.stringify({ id: 'chatgpt-usage-visualizer', path: dest }));
   const removed = old.filter((p) => p !== dest);
   for (const p of removed) fs.rmSync(p, { force: true });

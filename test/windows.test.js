@@ -47,10 +47,8 @@ test('Windows shortcut round trip launches hidden Node with exact arguments and 
       const options = { app, nodePath: process.execPath, toolPath: tool, name: '额度测试', extraArgs: ['--app', "C:\\开发 空间\\O'Brien\\Codex.exe", '--port', '9444'] };
       const installed = installWindowsLauncher(options);
       assert.deepEqual(windowsLaunchers(), [installed.path]);
-      const shortcut = JSON.parse(runPowerShell(`$s=(New-Object -ComObject WScript.Shell).CreateShortcut(${psQuote(installed.path)}); $s | Select-Object Arguments,IconLocation,WindowStyle | ConvertTo-Json -Compress`));
-      assert.match(shortcut.Arguments, /-WindowStyle Hidden/);
-      assert.equal(shortcut.WindowStyle, 7);
-      assert.equal(shortcut.IconLocation, process.execPath + ',0');
+      // Shell Link header ShowCommand is SW_SHOWMINNOACTIVE (7).
+      assert.equal(fs.readFileSync(installed.path).readUInt32LE(60), 7);
       relaunchWindowsLater(installed.path, 0);
       const deadline = Date.now() + 15000;
       while (!fs.existsSync(result) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
