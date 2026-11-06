@@ -1,7 +1,7 @@
 // 注入到 Codex 主窗口的组件脚本（在页面里运行，不能使用 Node API）
 // 运行前会在前面拼接：window.__codexUsageConfig = {...}
 (() => {
-  const VERSION = '0.6.0';
+  const VERSION = '0.6.0-popup.1';
   if (window.__codexUsageCountdown && window.__codexUsageCountdown.version === VERSION) return;
   if (window.__codexUsageCountdown) window.__codexUsageCountdown.destroy();
 
@@ -151,7 +151,7 @@
     .sep { width:70%; height:1px; background:var(--line); margin-top:2px; }
     .s-ok { stroke:var(--ok); } .s-warn { stroke:var(--warn); } .s-danger { stroke:var(--danger); } .s-stale { stroke:var(--stale); }
     .b-ok { background:var(--ok); } .b-warn { background:var(--warn); } .b-danger { background:var(--danger); } .b-stale { background:var(--stale); }
-    .pop { position:fixed; z-index:2147483000; width:240px; background:var(--card); border:1px solid var(--cardborder); border-radius:14px; padding:16px 16px 12px; box-shadow:0 8px 28px rgba(0,0,0,.14); color:var(--fg); }
+    .pop { position:fixed; inset:auto; margin:0; z-index:2147483000; width:240px; max-width:calc(100vw - 16px); max-height:calc(100vh - 16px); overflow:auto; background:var(--card); border:1px solid var(--cardborder); border-radius:14px; padding:16px 16px 12px; box-shadow:0 8px 28px rgba(0,0,0,.14); color:var(--fg); }
     .pop[hidden] { display:none; }
     .hd { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:14px; font-weight:600; }
     .x { border:0; background:transparent; color:var(--muted); font-size:16px; width:24px; height:24px; border-radius:6px; cursor:pointer; line-height:1; }
@@ -238,7 +238,7 @@
     root = host.attachShadow({ mode: 'open' });
     root.innerHTML = `<style>${CSS}</style>
       <div class="rail" role="button" tabindex="0" aria-label="查看剩余额度"></div>
-      <div class="pop" hidden role="dialog" aria-label="剩余额度">
+      <div class="pop" hidden popover="manual" role="dialog" aria-label="剩余额度">
         <div class="hd"><span>剩余额度</span><button class="x" aria-label="关闭">×</button></div>
         <div class="body"></div><div class="sty"><span>样式</span>${Object.entries(STYLES).map(([k, v]) => `<button data-style="${k}">${v}</button>`).join('')}</div><div class="sty tm"><span>时间</span>${Object.entries(TIME_MODES).map(([k, v]) => `<button data-time="${k}">${v}</button>`).join('')}</div><div class="ftw"><div class="ft"></div><button class="rf" title="立即同步一次（不影响自动同步）">刷新</button></div>
       </div>`;
@@ -449,15 +449,22 @@
     const pop = root.querySelector('.pop');
     const r = host.getBoundingClientRect();
     const h = pop.offsetHeight || 300;
-    pop.style.left = `${Math.round(r.right + 10)}px`;
+    const w = pop.offsetWidth || 240;
+    pop.style.left = `${Math.round(Math.max(8, Math.min(innerWidth - w - 8, r.right + 10)))}px`;
     pop.style.top = `${Math.round(Math.max(8, Math.min(innerHeight - h - 8, r.bottom - h)))}px`;
   }
 
   function togglePop(force) {
-    popOpen = force === undefined ? !popOpen : force;
     const pop = root.querySelector('.pop');
+    // Detaching the host removes a native popover from the top layer. Read the
+    // actual state so the first click after a sidebar remount opens it again.
+    const wasOpen = typeof pop.showPopover === 'function' ? pop.matches(':popover-open') : popOpen;
+    popOpen = force === undefined ? !wasOpen : force;
     pop.hidden = !popOpen;
-    if (popOpen) placePop();
+    if (popOpen) {
+      if (typeof pop.showPopover === 'function') pop.showPopover();
+      placePop();
+    } else if (typeof pop.hidePopover === 'function' && pop.matches(':popover-open')) pop.hidePopover();
   }
 
   // 手动刷新：通知本机的同步程序立即拉取一次；收到新数据或 15 秒后恢复按钮
@@ -495,6 +502,8 @@
     let target = anchor;
     for (let i = 0; i < (MOUNT.levelsUp || 0) && target.parentElement; i++) target = target.parentElement;
     if (!host) build();
+    // A detached popover cannot remain open after it is reinserted.
+    togglePop(false);
     if (MOUNT.position === 'after') target.after(host);
     else target.before(host);
     if (resizeObs) resizeObs.disconnect();
@@ -533,6 +542,8 @@
       if (observer) observer.disconnect();
       if (resizeObs) resizeObs.disconnect();
       clearInterval(timer);
+      clearTimeout(refreshTimer);
+      if (root) togglePop(false);
       document.removeEventListener('click', onDocClick, true);
       document.removeEventListener('keydown', onKey, true);
       if (host) host.remove();

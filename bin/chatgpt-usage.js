@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // 命令入口：只负责分发，具体实现在 src/
+import { revealLauncher } from '../src/windows.js';
 import { cmd, flag, buildConfig } from '../src/cli.js';
 import { USER_CONFIG_PATH } from '../src/config.js';
 import { findApp } from '../src/app.js';
@@ -25,14 +26,15 @@ async function install() {
   console.log('INSTALL_RESULT=ok');
   if (reveal && !flag('no-reveal')) {
     const { spawnSync } = await import('node:child_process');
-    spawnSync('/usr/bin/open', ['-R', reveal]);
+    if (process.platform === 'win32') revealLauncher(reveal);
+    else spawnSync('/usr/bin/open', ['-R', reveal]);
   }
 }
 
 async function uninstall() {
   const cfg = buildConfig();
   const sb = await sidebar();
-  if (sb.removeSidebar(cfg)) console.log('✓ 已删除启动器并还原程序坞');
+  if (sb.removeSidebar(cfg)) console.log('✓ 已删除启动器（macOS 同时还原程序坞）');
   if (cleanupLegacyMenubar()) console.log('✓ 已移除旧版本的菜单栏程序');
   console.log('UNINSTALL_RESULT=ok');
 }
@@ -42,9 +44,9 @@ async function doctor() {
   const ok = (b, m) => console.log(`${b ? '✓' : '✗'} ${m}`);
   const major = Number(process.versions.node.split('.')[0]);
   ok(major >= 22, `Node.js ${process.versions.node}（需要 22 或更高）`);
-  ok(process.platform === 'darwin', `系统：${process.platform}（目前仅支持 macOS）`);
+  ok(['darwin', 'win32'].includes(process.platform), `系统：${process.platform}（支持 macOS / Windows）`);
   const app = findApp(cfg.appNames);
-  ok(!!app, app ? `应用：${app.path}` : `找不到应用（尝试过：${cfg.appNames.join('、')}）。--app 填桌面端应用的名字，可用 ls /Applications 查看`);
+  ok(!!app, app ? `应用：${app.path}` : `找不到应用（尝试过：${cfg.appNames.join('、')}）。可用 --app 指定应用名或 Windows 可执行文件完整路径`);
   const bin = findCodexBin(cfg, app && app.path);
   ok(!!bin, bin ? `codex 可执行文件：${bin}` : '找不到 codex 可执行文件（将退回使用会话记录）');
   if (bin) {
@@ -70,14 +72,14 @@ async function help() {
 用法：
   chatgpt-usage install    创建启动器（与原应用同名）：和 Codex 一起启动、一起退出
                              --dock 替换程序坞原图标  --relaunch 15 秒后重启 Codex
-                             --launcher-name 启动器名称  --no-reveal 不在访达中显示
+                             --launcher-name 启动器名称  --no-reveal 不在文件管理器中显示
   chatgpt-usage uninstall  删除启动器，还原程序坞
   chatgpt-usage doctor     检查运行环境与数据源
   chatgpt-usage start      手动运行组件（终端前台）
   chatgpt-usage relaunch   15 秒后通过启动器重启 Codex（--delay 秒数）
 
 选项：
-  --app <名称>          指定应用名，例如 --app Codex
+  --app <名称>          指定应用名或 Windows .exe 完整路径
   --port <端口>         调试端口，默认 9222
   --codex-bin <路径>    指定 codex 可执行文件
   --yes                 需要重启 Codex 时不再询问

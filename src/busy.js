@@ -1,6 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { windowsProcesses, windowsDialog } from './windows.js';
 
 // 判断 Codex 是否可能正在执行任务（启发式，两条满足其一即视为忙碌）：
 // 1. 最近 recentWriteSec 秒（默认 30）内有会话记录写入（模型正在回复或刚执行完步骤）
@@ -15,6 +16,9 @@ function parseEtime(s) {
 }
 
 export function listProcesses() {
+  if (process.platform === 'win32') {
+    try { return windowsProcesses(); } catch { return []; }
+  }
   let out = '';
   try {
     out = execFileSync('/bin/ps', ['-axo', 'pid=,ppid=,etime=,command='], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
@@ -26,8 +30,20 @@ export function listProcesses() {
 }
 
 export function runningCommands(appPath, procs = listProcesses(), graceSec = 120) {
-  const inApp = (p) => p.command.startsWith(appPath + '/');
-  const roots = procs.filter((p) => inApp(p) && path.basename(p.command.split(' ')[0]) === 'codex');
+  const win = /\.exe$/i.test(appPath);
+  const appDir = win ? path.win32.dirname(appPath).toLowerCase() + '\\' : appPath + '/';
+  const inApp = (p) => win ? (p.executable || '').toLowerCase().startsWith(appDir) : (p.command || '').startsWith(appDir);
+  const appPids = new Set(procs.filter((p) => p.executable?.toLowerCase() === appPath.toLowerCase()).map((p) => p.pid));
+  const descendantOfApp = (p) => {
+    const seen = new Set();
+    while (p && !seen.has(p.pid)) {
+      if (appPids.has(p.pid)) return true;
+      seen.add(p.pid);
+      p = procs.find((parent) => parent.pid === p.ppid);
+    }
+    return false;
+  };
+  const roots = procs.filter((p) => (inApp(p) || (win && descendantOfApp(p))) && (win ? path.win32.basename(p.executable || '').toLowerCase() === 'codex.exe' : path.basename((p.command || '').split(' ')[0]) === 'codex'));
   const children = new Map();
   for (const p of procs) {
     if (!children.has(p.ppid)) children.set(p.ppid, []);
@@ -39,7 +55,7 @@ export function runningCommands(appPath, procs = listProcesses(), graceSec = 120
     while (stack.length) {
       const p = stack.pop();
       stack.push(...(children.get(p.pid) || []));
-      if (inApp(p) || p.age === null || root.age === null) continue;
+      if (inApp(p) || p.age == null || root.age == null) continue;
       if (root.age - p.age > graceSec) found.push(p);
     }
   }
@@ -70,7 +86,7 @@ export function codexBusy(app, cfg) {
   const writeAge = newestSessionWriteAgeSec(cfg.sessionsDir);
   if (writeAge < (b.recentWriteSec ?? 30)) return { busy: true, reason: `${Math.round(writeAge)} 秒前有会话写入` };
   const cmds = runningCommands(app.path, listProcesses(), b.commandGraceSec ?? 120);
-  if (cmds.length) return { busy: true, reason: `正在运行命令：${cmds[0].command.slice(0, 60)}` };
+  if (cmds.length) return { busy: true, reason: `正在运行命令：${(cmds[0].command || cmds[0].executable || '').slice(0, 60)}` };
   return { busy: false, reason: '' };
 }
 
@@ -78,6 +94,7 @@ const asStr = (s) => `"${String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"').r
 
 // 弹出最多三个按钮的对话框，返回被点击的按钮文字；取消或出错返回 null
 export function askDialog({ title, message, buttons, defaultButton, cancelButton }) {
+  if (process.platform === 'win32') return windowsDialog({ title, message, buttons, defaultButton, cancelButton });
   const script = `display dialog ${asStr(message)} with title ${asStr(title)} buttons {${buttons.map(asStr).join(', ')}}`
     + (defaultButton ? ` default button ${asStr(defaultButton)}` : '')
     + (cancelButton ? ` cancel button ${asStr(cancelButton)}` : '')
@@ -91,5 +108,6 @@ export function askDialog({ title, message, buttons, defaultButton, cancelButton
 }
 
 export function notify(title, message) {
+  if (process.platform === 'win32') { console.log(`${title}：${message}`); return; }
   spawnSync('/usr/bin/osascript', ['-e', `display notification ${asStr(message)} with title ${asStr(title)}`]);
 }

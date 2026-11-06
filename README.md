@@ -22,7 +22,7 @@ ChatGPT / Codex 桌面端额度可视化工具：在 Codex 左侧栏"用量"按�
 
 ## 运行要求
 
-- macOS
+- macOS 或 Windows 10/11（Windows 需要桌面版 Codex，不能仅安装 CLI）
 - Node.js 22 或更高版本（终端运行 `node -v` 查看，没有的话到 [nodejs.org](https://nodejs.org) 安装）
 - Codex 桌面端（ChatGPT.app 或 Codex.app）
 
@@ -55,6 +55,40 @@ node bin/chatgpt-usage.js doctor
 ```
 
 会在 `~/Applications` 下生成一个与原应用同名、同图标的启动器（例如 `~/Applications/ChatGPT.app`），并把程序坞里原来的图标替换成它（原设置已备份，卸载时会还原；不想改程序坞可加 `--no-dock`）。完全退出 Codex 后，照常从程序坞点图标打开即可。想换启动器名称可加 `--launcher-name 名称`。卸载运行 `./uninstall.sh`。
+
+## Windows 安装与使用
+
+Windows 复用与 macOS 完全相同的组件脚本、四种图标、详情卡片、倒计时、主题和额度同步逻辑，不需要另建仓库。
+
+在 PowerShell 中进入仓库目录，检查环境并安装：
+
+```powershell
+node bin/chatgpt-usage.js doctor
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+`-ExecutionPolicy Bypass` 仅用于这一次脚本进程，不修改系统策略。也可以直接运行 `node bin/chatgpt-usage.js install`。
+
+安装会在当前用户的开始菜单创建 `ChatGPT (Usage)` 或 `Codex (Usage)` 快捷方式，沿用原应用图标。保存当前任务并退出 Codex 后，从该快捷方式打开：组件在后台运行，无需保持终端。重复点击不会运行多个组件；退出 Codex 后组件自动停止。可以手动把快捷方式固定到任务栏；Windows 不自动替换已有的固定图标。
+
+支持正在运行的桌面端、常见安装目录和 Microsoft Store 包的自动发现。自定义安装位置可指定完整路径：
+
+```powershell
+node bin/chatgpt-usage.js install --app 'D:\Apps\Codex\ChatGPT.exe'
+# 额度 CLI 无法自动发现时，可额外传入 --codex-bin 'D:\Apps\Codex\resources\codex.exe'
+```
+
+Store 更新后会重新发现应用位置。指定了 `--app` 完整路径时，应用升级导致路径变化后需要重新安装启动器。
+
+日志在 `%LOCALAPPDATA%\chatgpt-usage-visualizer\logs\chatgpt-usage-visualizer.log`，配置仍在 `%USERPROFILE%\.chatgpt-usage-visualizer\config.json`。移动仓库或 Node.js 后请重新安装启动器。
+
+卸载前先退出 Codex（或对前台运行的组件按 Ctrl+C），然后运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1
+```
+
+卸载只删除本工具拥有的快捷方式，保留配置和日志；手动固定的任务栏图标需自行取消固定。Windows 上不使用 macOS 的程序坞、AppleScript 或 `.app` 启动器。下方关于程序坞和 `~/Applications` 的说明仅适用于 macOS。
 
 ## 使用方式
 
@@ -150,7 +184,7 @@ node bin/chatgpt-usage.js doctor
 
 ```
 node bin/chatgpt-usage.js doctor      检查运行环境、调试端口、数据源
-node bin/chatgpt-usage.js install     创建启动器（--dock 替换程序坞图标，--launcher-name 自定义名称）
+node bin/chatgpt-usage.js install     创建启动器（Windows 为开始菜单快捷方式；--dock 仅限 macOS）
 node bin/chatgpt-usage.js uninstall   删除启动器，还原程序坞
 node bin/chatgpt-usage.js relaunch    15 秒后通过启动器重新打开 Codex
 node bin/chatgpt-usage.js start       手动启动（终端前台运行）
@@ -179,11 +213,11 @@ node bin/chatgpt-usage.js start       手动启动（终端前台运行）
 ## 开发
 
 ```bash
-npm test                                   # 单元测试（含模拟 app-server）
+npm test                                   # 单元测试及 Windows 原生快捷方式集成测试
 node bin/chatgpt-usage.js start --debug    # 输出详细日志
 ```
 
-目录结构：`bin/` 命令行入口，`src/widget.js` 注入界面的组件，`src/sync.js` 自动同步，`src/appServer.js` app-server 客户端，`src/sessions.js` 会话记录读取，`src/cdp.js` 调试协议，`src/launcher.js` 启动器与程序坞，`src/busy.js` 任务检测，`src/commands.js` 各命令的实现，`config/default.json` 默认配置。
+目录结构：`bin/` 命令行入口，`src/widget.js` 注入界面的组件，`src/sync.js` 自动同步，`src/appServer.js` app-server 客户端，`src/sessions.js` 会话记录读取，`src/cdp.js` 调试协议，`src/launcher.js` 启动器与程序坞，`src/windows.js` Windows 原生集成，`src/busy.js` 任务检测，`src/commands.js` 各命令的实现，`config/default.json` 默认配置。
 
 欢迎提交 Issue 和 Pull Request，尤其是 Codex 更新后的选择器适配。
 

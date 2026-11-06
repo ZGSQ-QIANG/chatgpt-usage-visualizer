@@ -5,6 +5,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { isPortOpen } from './cdp.js';
 import { isRunning, bundleId } from './app.js';
+import { windowsLaunchers, installWindowsLauncher, uninstallWindowsLauncher, windowsLog,
+  relaunchWindowsLater, openWindowsApp, windowsProcesses, runPowerShell } from './windows.js';
+
+export function activateApp(app) {
+  if (process.platform === 'win32') return openWindowsApp(app);
+  spawnSync('/usr/bin/open', ['-a', app.path]);
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -23,12 +30,23 @@ export function isOurLauncher(appPath) {
 }
 
 export function findInstalledLaunchers() {
+  if (process.platform === 'win32') return windowsLaunchers();
   let entries = [];
   try { entries = fs.readdirSync(LAUNCHER_DIR); } catch { return []; }
   return entries.filter((e) => e.endsWith('.app')).map((e) => path.join(LAUNCHER_DIR, e)).filter(isOurLauncher);
 }
 
 export async function quitApp(app, timeoutMs = 20000) {
+  if (process.platform === 'win32') {
+    const pids = windowsProcesses().filter((p) => p.executable?.toLowerCase() === app.path.toLowerCase()).map((p) => p.pid);
+    if (pids.length) runPowerShell(`Get-Process -Id ${pids.join(',')} -ErrorAction SilentlyContinue | ForEach-Object { [void]$_.CloseMainWindow() }`);
+    const until = Date.now() + timeoutMs;
+    while (Date.now() < until) {
+      if (!isRunning(app.path)) return true;
+      await sleep(500);
+    }
+    return false;
+  }
   // 按 bundle id 退出，避免同名启动器造成歧义
   const id = bundleId(app.path);
   spawnSync('/usr/bin/osascript', ['-e', id ? `quit app id "${id}"` : `quit app "${app.name}"`]);
@@ -41,7 +59,11 @@ export async function quitApp(app, timeoutMs = 20000) {
 }
 
 export async function launchWithPort(app, port, timeoutMs = 30000) {
-  spawnSync('/usr/bin/open', ['-a', app.path, '--args', `--remote-debugging-port=${port}`]);
+  if (process.platform === 'win32') {
+    const child = spawn(app.path, [`--remote-debugging-port=${port}`, '--remote-debugging-address=127.0.0.1'], { detached: true, stdio: 'ignore', windowsHide: true });
+    child.on('error', () => {});
+    child.unref();
+  } else spawnSync('/usr/bin/open', ['-a', app.path, '--args', `--remote-debugging-port=${port}`, '--remote-debugging-address=127.0.0.1']);
   const t0 = Date.now();
   while (Date.now() - t0 < timeoutMs) {
     if (await isPortOpen(port)) return true;
@@ -51,13 +73,14 @@ export async function launchWithPort(app, port, timeoutMs = 30000) {
 }
 
 // ---------- 启动器：一个不显示程序坞图标的小 .app，负责以调试模式打开 Codex 并运行组件 ----------
-export const LAUNCHER_LOG = path.join(os.homedir(), 'Library', 'Logs', 'chatgpt-usage-visualizer.log');
+export const LAUNCHER_LOG = process.platform === 'win32' ? windowsLog : path.join(os.homedir(), 'Library', 'Logs', 'chatgpt-usage-visualizer.log');
 
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 const xmlEsc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // 返回 { path, removed }：removed 为被替换掉的旧启动器路径（用于更新程序坞）
 export function installLauncherApp({ app, name, nodePath, toolPath, extraArgs = [] }) {
+  if (process.platform === 'win32') return installWindowsLauncher({ app, name, nodePath, toolPath, extraArgs });
   const launcherName = name || app.name;
   const LAUNCHER_PATH = path.join(LAUNCHER_DIR, `${launcherName}.app`);
   if (path.resolve(LAUNCHER_PATH) === path.resolve(app.path)) {
@@ -120,6 +143,7 @@ exit 0
 }
 
 export function uninstallLauncherApp() {
+  if (process.platform === 'win32') return uninstallWindowsLauncher();
   const found = findInstalledLaunchers();
   for (const p of found) fs.rmSync(p, { recursive: true, force: true });
   return found;
@@ -164,6 +188,7 @@ function editDock(fn) {
 
 // 返回 'replaced' | 'added' | 'exists'；oldPaths 为旧启动器路径，会被改指向新启动器
 export function dockInstall(appPath, LAUNCHER_PATH, oldPaths = []) {
+  if (process.platform === 'win32') return 'unsupported';
   return editDock((tmp, tiles) => {
     if (!fs.existsSync(DOCK_BACKUP)) {
       fs.mkdirSync(path.dirname(DOCK_BACKUP), { recursive: true });
@@ -189,6 +214,7 @@ export function dockInstall(appPath, LAUNCHER_PATH, oldPaths = []) {
 
 // 把启动器图标换回原应用；返回 'restored' | 'none'
 export function dockRestore(app, launcherPaths) {
+  if (process.platform === 'win32') return 'none';
   return editDock((tmp, tiles) => {
     const t = tiles.find((x) => launcherPaths.includes(x.path));
     if (!t) return 'unchanged';
@@ -200,6 +226,7 @@ export function dockRestore(app, launcherPaths) {
 
 // 延迟几秒后通过启动器重新打开 Codex（独立进程，调用方退出也不影响）
 export function relaunchLater(LAUNCHER_PATH, seconds = 15) {
+  if (process.platform === 'win32') return relaunchWindowsLater(LAUNCHER_PATH, seconds);
   const child = spawn('/bin/sh', ['-c', `sleep ${Number(seconds)}; /usr/bin/open ${shq(LAUNCHER_PATH)}`], {
     detached: true,
     stdio: 'ignore',
