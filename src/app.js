@@ -44,6 +44,13 @@ export function isRunning(appPath) {
   return r.status === 0;
 }
 
+// Codex 主进程的 PID（最早启动的那个），找不到返回 null
+export function mainPid(appPath) {
+  const r = spawnSync('/usr/bin/pgrep', ['-o', '-f', `^${reEscape(path.join(appPath, 'Contents', 'MacOS'))}/`], { encoding: 'utf8' });
+  const pid = Number(String(r.stdout || '').trim().split('\n')[0]);
+  return r.status === 0 && pid ? pid : null;
+}
+
 export function bundleId(appPath) {
   try {
     return execFileSync('/usr/bin/defaults', ['read', path.join(appPath, 'Contents', 'Info'), 'CFBundleIdentifier'], { encoding: 'utf8' }).trim();

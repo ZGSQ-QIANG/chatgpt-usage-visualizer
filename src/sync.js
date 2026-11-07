@@ -109,6 +109,8 @@ export class UsageSync extends EventEmitter {
         return;
       } catch (e) {
         this.log(`读取额度失败：${e.message}`);
+        // 请求超时通常是 app-server 卡住了（例如睡眠唤醒后），重启它
+        if (/超时/.test(e.message) && this.client) { this.log('重启 app-server'); this.client.stop(); }
       }
     }
     const appServerFailed = !!this.client;
